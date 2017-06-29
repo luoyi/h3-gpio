@@ -19,7 +19,8 @@ struct gpio_t {
 	uint32_t*  dat_ptr;
 	uint32_t   reg_idx;
 	uint32_t   reg_clear_mask;
-	uint32_t   data_mask;
+	uint32_t   data_clear_mask;
+	uint32_t   old_val;
 	uint32_t   val;
 };
 

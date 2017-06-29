@@ -1,0 +1,6 @@
+lib/*
+lib.release/*
+lib.debug/*
+build/*
+build.release/*
+build.debug/*

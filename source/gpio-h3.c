@@ -1,3 +1,4 @@
+#include "comm.h"
 #include "gpio-h3.h"
 
 static const off_t GPIO_REG_BASE=0x01C20000;
@@ -20,13 +21,13 @@ int gpio_system_init(void)
 				MAP_SHARED, fd, GPIO_REG_BASE);
 
 		if ( MAP_FAILED == ptr ) {
-			fprintf(stderr, "fd = %d, mmap error: %d-%s\n", fd, errno, strerror(errno));
+			FATAL_ERRORF("fd = %d, mmap error: %d-%s\n", fd, errno, strerror(errno));
 			return -1;
 		}
-		printf("ptr = 0x%08X\n", ptr);
+		DBG_MSG("ptr = 0x%08X", ptr);
 		ptr += GPIO_REG_OFF;
 		p_gpio = (uint32_t*) ptr;
-		printf("p_gpio = 0x%08X\n", p_gpio);
+		DBG_MSG("p_gpio = 0x%08X", p_gpio);
 	}
 	return 0;
 }
@@ -44,6 +45,7 @@ int gpio_init(struct gpio_t* p, const char * name)
 	p->reg_idx  = p->idx % 8;
 	p->reg_clear_mask = ~(( p->reg_idx * 4 )<<0xF);
 	p->data_mask = ~((p->idx)<<1);
+	p->val = 0xffffffff;
 	printf("bank = %c, idx = %d, base_off= %d, reg_off = %d, reg_idx = %d, reg=0x%x\n", bank, p->idx, 
 			p->base_off, p->reg_off, p->reg_idx, *(p->reg_ptr));
 	return 0;
@@ -104,4 +106,57 @@ void gpio_demo_test(void)
 	printf("pa1 = 0x%x\n", *p_gpio++);
 	printf("pa2 = 0x%x\n", *p_gpio++);
 	printf("pa3 = 0x%x\n", *p_gpio++);
+}
+
+int gpio_bank_set_input(struct gpio_bank_t* pbank)
+{
+	uint32_t i = 0;
+	for ( i = 0; i < pbank->size; i++ ) {
+		gpio_set_input(pbank->gpio[i]);
+	}
+	return 0;
+}
+int gpio_bank_set_output(struct gpio_bank_t* pbank)
+{
+	uint32_t i = 0;
+	for ( i = 0; i < pbank->size; i++ ) {
+		gpio_set_output(pbank->gpio[i]);
+	}
+	return 0;
+}
+int gpio_bank_set_output_value(struct gpio_bank_t* pbank, const uint32_t v)
+{
+	if ( pbank->size == 0 ) {
+		return 0;
+	}
+	if ( v != 1 || v != 0 ) {
+		return -1;
+	}
+
+	uint32_t dv = *((pbank->gpio[0])->dat_ptr);
+	__sync_synchronize();
+	uint32_t mask = 0;
+	for ( uint32_t i = 0; i < pbank->size; i++ ) {
+		uint32_t m = pbank->gpio[i]->idx << v;
+		m |=  pbank->gpio[i]->data_mask;
+		mask |= m;
+		gpio_set_output_value(pbank->gpio[i], v);
+		dv &= pbank->gpio[i]->data_mask;
+	}
+	dv |= mask;
+	*(pbank->gpio[0]->dat_ptr) = dv;
+	__sync_synchronize();
+
+	return 0;
+}
+int gpio_bank_read(struct gpio_bank_t* pbank)
+{
+	uint32_t dv = *((pbank->gpio[0])->dat_ptr);
+	__sync_synchronize();
+	for ( uint32_t i = 0; i < pbank->size; i++ ) {
+		uint32_t mask = (pbank->gpio[i]->idx << 1);
+		uint32_t v = dv;	
+		pbank->gpio[i]->val = ( v & mask ) ? 1 : 0;
+	}
+	return 0;
 }
